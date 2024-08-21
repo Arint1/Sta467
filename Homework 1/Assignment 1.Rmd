@@ -1,0 +1,259 @@
+---
+title: "Assignment 1"
+author: "Alex Rintamaa"
+date: '2024-03-01'
+output: html_document
+---
+
+1) Consider a linear regression model. As we add additional parameters to our model (such as quadratic
+terms or additional covariates), what is likely to happen to the expected values of the following? Briefly
+explain your answers. (Note: our in-class example in week 1 looked at the observed bias and variance for
+the training set. Here, you are answering about the expected bias and variance for the test set. You
+should think back to the general rules about the bias-variance trade-off for this question.)
+a) 𝐵𝑖𝑎𝑠[𝑓̂ (𝑋)]
+
+flexibility increases while the expected bias decreases. This is a result because with less bias the number of predictors increases, which increases the number of Degrees of Freedom
+
+b) 𝑉𝑎𝑟[𝑓̂ (𝑋)]
+
+flexibility will increase while the expected variance increases. This happens because the degrees of freedom increases as the number of predictors increase which is the case with increased expected variance
+
+c) 𝑉𝑎𝑟[𝜖]
+
+Because sigma^2 is a constant, the variance of the errors will not change based on flexibility. Because
+errors are not effected by the number of predictors the, there cannot be a change bas on flexibility.
+
+d) Training MSE
+
+If the flexibility increases, the training MSE will decrease, The flexibility is increasing when training MSE decreases, as a result of more predictors being in the training MSE.
+
+e) Test MSE
+
+The test MSE will initially follow the same the training MSE, however as overfitting starts to happen the flexibility will start to decrease. This makes sense because it would follow the same trend as the expected bias flexibility.
+
+2) Now consider a KNN model. As we increase the value of k, what is likely to happen to the expected
+values of the following? Briefly explain your answers.
+
+a) 𝐵𝑖𝑎𝑠[𝑓̂ (𝑋)]
+
+Expected bias will increase with an increase in K, this can be proven by expected bias above, as an increase in K is equivalent to expected bias decreasing.
+
+b) 𝑉𝑎𝑟[𝑓̂ (𝑋)]
+
+Expected variance will decrease with an increase in K, this can be proven by expected variance above, as an increase in K is equivalent to expected variance decreasing
+
+c) 𝑉𝑎𝑟[𝜖]
+
+As a result of Variance of the errors being constant, an increase in K would have no effect of the variance of errors.
+
+d) Training MSE
+
+Training MSE increases as a result of K increasing, this can be proven by the training MSE above, as an increase in K is equivalent to a decrease in training MSE.
+
+e) Test MSE
+
+Test MSE decreases as a result of K increasing, this can be proven by the testing MSE above, as an increase in K is equivalent to a increase in Test MSE.
+
+3) Use the following R data frame as the training set for this problem.
+# Training data for problem 3
+knnData <- data.frame(X1 = c(5,3,6,9,4,7),
+X2 = c(13,18,18,15,11,19),
+Y = c(9,6,8,12,7,5))
+a) Consider a new point (X1 = 6, X2 = 12). What are the Euclidean distances between this new point
+and each of the 6 training data points?
+b) What are the indices for the k=2 nearest neighbors to the new data point? What about the
+indices for the k=3 nearest neighbors? Find the predicted Y value for both of these models.
+
+```{r}
+knnData <- data.frame(X1 = c(5,3,6,9,4,7),
+ X2 = c(13,18,18,15,11,19),
+ Y = c(9,6,8,12,7,5))
+
+x <- data.frame(X1 = 6, X2 = 12)
+
+
+euclid <- sqrt((knnData$X1 - x$X1)^2 + (knnData$X2 - x$X2)^2)
+print("The Euclidean distances are")
+print(euclid)
+
+distance = order(euclid)
+distance
+
+knn2 = distance[1]
+knn2
+knn3 = distance[2]
+knn3
+
+
+# y_hat estimates
+y_hat_k2 <- mean(knnData$Y[knn2])
+y_hat_k3 <- mean(knnData$Y[knn3])
+
+
+# Printing the predicted values.
+print("The predicted values for y where k = 2 and y  where k = 3 are below.")
+y_hat_k2
+y_hat_k3
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(tidyverse)
+library(MASS)        # lda and qda functions in MASS package
+library(pdfCluster)  # package containing the olive oil data
+library(ggpubr) # ggarrange()
+```
+
+## Read data in from website
+
+```{r}
+college <- read.csv("https://www.statlearning.com/s/College.csv",
+row.names=1)
+```
+
+```{r}
+# Standardize the numeric variables
+college[,-1] <- as.data.frame(scale(college[,-1]))
+```
+
+```{r}
+# Break into training and test data, DO NOT CHANGE THE SEED!
+set.seed(02242023)
+test_index <- sample(1:777, 277)
+test_data <- college[test_index,]
+train_data <- college[-test_index,]
+```
+
+4) Build a KNN model to classify schools as public or private using the number of full-time undergraduate
+students (F.Undergrad) and the out-of-state tuition (Outstate), using the knn3() function in the
+caret package. Try three different neighborhood sizes: k=1, k=10, and k=20. Compute the training and
+test misclassification rates for each size. Which of these appears to be the best model for predicting
+whether schools are public or private? Briefly explain.
+
+
+## K = 1
+
+```{r}
+# 1-nearest neighbor
+# Note the need to make mandate a factor! - matters with predict() later
+k1_model <- knn3(as.factor(Private) ~ F.Undergrad + Outstate, data = train_data, k = 1)
+
+# Predict test set using predict()
+ # Note: Default is type="prob", make sure you specify class!
+test_data$est.private.caret <- predict(k1_model, test_data, type ="class")
+train_data$est.private.caret <- predict(k1_model, train_data, type = "class")
+
+
+# Misclassification rate
+misclass_rate <- mean(test_data$est.private.caret != test_data$Private)
+misclass_train_rate <- mean(train_data$est.private.caret != train_data$Private)
+misclass_rate
+misclass_train_rate
+```
+
+## K = 10
+
+```{r}
+# 10-nearest neighbors
+# Note the need to make mandate a factor! - matters with predict() later
+k10_model <- knn3(as.factor(Private) ~ F.Undergrad + Outstate, data = train_data, k = 10)
+
+# Predict test set using predict()
+ # Note: Default is type="prob", make sure you specify class!
+test_data$est.private.caret10 <- predict(k10_model, test_data, type ="class")
+train_data$est.private.caret10 <- predict(k10_model, train_data, type = "class")
+
+# Misclassification rate
+misclass_rate2 <- mean(test_data$est.private.caret10 != test_data$Private)
+misclass_train_rate2 <- mean(train_data$est.private.caret10 != train_data$Private)
+misclass_rate2
+misclass_train_rate2
+```
+
+
+## K = 20
+
+```{r}
+# 20-nearest neighbors
+# Note the need to make mandate a factor! - matters with predict() later
+k20_model <- knn3(as.factor(Private) ~ F.Undergrad + Outstate, data = train_data, k = 20)
+
+# Predict test set using predict()
+ # Note: Default is type="prob", make sure you specify class!
+test_data$est.private.caret20 <- predict(k20_model, test_data, type ="class")
+train_data$est.private.caret20 <- predict(k20_model, train_data, type = "class")
+
+
+# Misclassification rate
+misclass_rate3 <- mean(test_data$est.private.caret20 != test_data$Private)
+misclass_train_rate3 <- mean(train_data$est.private.caret20 != train_data$Private)
+misclass_rate3
+misclass_train_rate3
+```
+
+The model that appears to be the best out of K=1, K=10, and K=20, would be the K=20, because this has the lowest misclass rate for both train and test. As the K increases it would appear that the misclass rate gets better.
+
+5) Now, use a logistic regression model to classify schools as public or private using the same two
+predictors (F.Undergrad and Outstate). Compute the training and test misclassification rates for this
+classifier. How do these rates compare to the best KNN model in Problem 4?
+
+### Logistic Regression
+
+```{r}
+log_college <- glm(as.factor(Private) ~ F.Undergrad + Outstate, family=binomial(link=logit), data=train_data)
+
+# Predict test set using predict()
+ # Note: Default is type="prob", make sure you specify class!
+test_data$est.private.caretlog <- predict(log_college, test_data, type = "response")
+train_data$est.private.caretlog <- predict(log_college, train_data, type = "response")
+
+test_data$est.private.caretlog <- ifelse(test_data$est.private.caretlog > 0.5, "Yes", "No")
+train_data$est.private.caretlog <- ifelse(train_data$est.private.caretlog > 0.5, "Yes", "No")
+
+
+# Misclassification rate
+misclass_ratelog <- mean(test_data$est.private.caretlog != test_data$Private)
+misclass_train_ratelog <- mean(train_data$est.private.caretlog != train_data$Private)
+misclass_ratelog
+misclass_train_ratelog
+```
+
+The logistic regression model here is worse than the K=20 model for the the test misclassification rate. However, the training rate is not higher is slightly worse. Thus we defer to the test rate, saying that the k=20 model is better.
+
+6) Lastly, use linear discriminant analysis to classify schools as public or private using the same two
+predictors (F.Undergrad and Outstate).
+a) As in Problems 4 and 5, compute the training and test misclassification rates for this classifier.
+b) Compare these misclassification rates to the two other classifiers. Which classifier appears to be
+the best classifier?
+c) Create a scatterplot of number of full-time undergraduate students vs. out-of-state tuition, and
+indicate the regions of the plot that are classified as public or private.
+
+
+```{r}
+# Creating lda model
+lda_model <- lda(as.factor(Private) ~ F.Undergrad + Outstate, data = train_data)
+
+# Predict test set using predict()
+ # Note: Default is type="prob", make sure you specify class!
+test_data$est.private.caretlda <- predict(lda_model, test_data)$class
+train_data$est.private.caretlda <- predict(lda_model, train_data)$class
+
+
+# Misclassification rate
+misclass_ratelda <- mean(test_data$est.private.caretlda != test_data$Private)
+misclass_train_ratelda <- mean(train_data$est.private.caretlda != train_data$Private)
+misclass_ratelda
+misclass_train_ratelda
+```
+
+The lda misclassification rates are much worse than both the K=20 model and the logistic regression model, having a higher rate than both of the other models by a good amount.
+
+```{r}
+ggplot(college, aes(x = F.Undergrad, y = Outstate, color = Private)) +
+  geom_point() + 
+  labs(x = "Full-Time Undergraduate Students",
+       y = "Out-of-State Tuition",
+       title = "Undergrads vs Out-of-State within Public Schools and Private Schools") +
+  theme_bw()
+```
