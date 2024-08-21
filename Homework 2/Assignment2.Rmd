@@ -1,0 +1,223 @@
+---
+title: "Homework 2"
+author: "Alex Rintamaa"
+date: '2024-03-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(MASS) 
+```
+
+## Problem 1
+
+1) (STA467: 5pt, STA567: 2.5pt) Explain the advantages of using cross-validation instead of validation
+with a single test set?
+
+The advantages of using cross-validation instead of validation with a single test set, is that more of the data is used in to trian the model as compared to validation with a single test set. Using more of the data to trian the model is important because it decreases the bias in the model. Cross-validation is also much better at predictiving overfitting.
+
+## Problem 2
+
+2) (STA467: 5pt, STA567: 2.5pt) What are the advantages and disadvantages of leave-one-out cross-
+validation compared to k-fold cross-validation?
+
+As a result of LOOCV estimates of test error being highly correlated with each other, the variance of the LOOCV estimate of test error is larger than the estimate of using k-fold cross-validation. However, for k-fold validation if we have a high bias, then the K-fold model is too simple, and is prone to underfitting. LOOCV is lias bias because it uses more data to train the model.
+
+## Problem 3
+
+3) (10pt) Use a 5-fold cross-validation to compare the following models for classifying the iris flowers by
+species. NOTE: You should standardize your predictors, since we are using KNN.
+
+```{r}
+data(iris)
+glimpse(iris)
+
+standardize <- function(x){
+  z <- (x - mean(x))/sd(x)
+  return(z)
+}
+
+iris.standardized <- iris %>%
+  mutate(SL_s = standardize(Sepal.Length),
+         SW_s = standardize(Sepal.Width),
+         PL_s = standardize(Petal.Length),
+         PW_s = standardize(Petal.Width))
+```
+a) LDA with sepal length and sepal width
+b) LDA with all 4 predictors
+c) 5-nearest neighbors with all 4 predictors
+d) 10-nearest neighbors with all 4 predictors
+Report the cross-validation accuracy (i.e. 1 – MC rate) for each model:
+Model Cross-Validation Accuracy
+
+```{R}
+set.seed(03082024)
+
+add_cv_folds <- function(dat,cv_K){
+  if(nrow(dat) %% cv_K == 0){ # if perfectly divisible, %%: mode, %/%: integer division
+    dat$fold <- sample(rep(1:cv_K, each=(nrow(dat)%/%cv_K))) # shuffle
+  } else { # if not perfectly divisible
+    dat$fold <- sample(c(rep(1:(nrow(dat) %% cv_K), each=(nrow(dat)%/%cv_K + 1)), 
+                              rep((nrow(dat) %% cv_K + 1):cv_K,
+                                   each=(nrow(dat)%/%cv_K)) ) )
+  }
+  return(dat)
+}
+
+iris.standardized <- add_cv_folds(iris.standardized, 5)
+
+kfold_preds1 <- rep(NA, 150)
+kfold_preds2 <- rep(NA, 150)
+kfold_preds3 <- rep(NA, 150)
+kfold_preds4 <- rep(NA, 150)
+kfold_acc1 <- rep(NA, 5)
+
+for (j in 1:5) {
+  # Separate our training (~400 obs) and test data (~100 obs)
+  fold_index <- which(iris.standardized$fold == j)
+
+  training <- iris.standardized[-fold_index, ]
+  testing <- iris.standardized[fold_index, ]
+
+  # 1) Train the model
+  lda_spec <- lda(as.factor(Species) ~ SL_s + SW_s, data =training)
+  lda_spec_4 <- lda(as.factor(Species) ~ SL_s + SW_s + PL_s + PW_s, data =training)
+  knn5 <- knn3(as.factor(Species) ~ SL_s + SW_s + PL_s + PW_s, data=training, k=5)
+  knn10 <- knn3(as.factor(Species) ~ SL_s + SW_s + PL_s + PW_s, data = training, k=10)
+
+  # 2) Test predictions
+  kfold_preds1[fold_index] <- predict(lda_spec, newdata = testing)$class
+  kfold_preds2[fold_index] <- predict(lda_spec_4, newdata = testing)$class
+  kfold_preds3[fold_index] <- predict(knn5, newdata = testing, type = "class")
+  kfold_preds4[fold_index] <- predict(knn10, newdata = testing, type = "class")
+  
+}
+```
+
+
+# Accuracy Code and Answer
+
+```{r}
+# lda with 2 predictors accuracy and misclass
+lda_mc <- mean(kfold_preds1 != as.numeric(iris.standardized$Species[1:150]))
+acc_lda_mc <- 1 - lda_mc
+
+# lda with all 4 predictors accuracy and misclass
+lda_4_mc <- mean(kfold_preds2 != as.numeric(iris.standardized$Species[1:150]))
+acc_lda_4_mc <- 1 - lda_4_mc
+
+# knn4 accuracy and misclass
+knn5_mc <- mean(kfold_preds3 != as.numeric(iris.standardized$Species[1:150]))
+acc_knn5 <- 1 - knn5_mc
+
+# knn10 accuracy and misclass
+knn10_mc <- mean(kfold_preds4 != as.numeric(iris.standardized$Species[1:150]))
+acc_knn10 <- 1 - knn10_mc
+
+# creating accuracy data frame
+acc_rate <- c(acc_lda_mc, acc_lda_4_mc, acc_knn5, acc_knn10)
+acc_df <- data.frame(acc_rate)
+acc_df
+```
+
+
+## Problem 4
+
+4) (10pt) Suppose you are only interested in identifying I. versicolor. Create a binary variable that
+identifies the species as versicolor or not. Use LOOCV to compare the following models for classifying iris
+flowers as versicolor or not (using all 4 predictors):
+a) Logistic regression
+b) 10-nearest neighbors
+c) LDA
+For each model, compute the sensitivity, specificity, and the misclassification rate.
+
+```{r, warning=FALSE}
+iris.standardized1 <- iris %>%
+  mutate(SL_s = standardize(Sepal.Length),
+         SW_s = standardize(Sepal.Width),
+         PL_s = standardize(Petal.Length),
+         PW_s = standardize(Petal.Width),
+         versI = ifelse(Species == "versicolor", "Yes", "No"))
+
+# Initialize a vector for storing the predicted prices
+loo_preds1 <- rep(NA, 150)
+loo_preds2 <- rep(NA, 150)
+loo_preds3 <- rep(NA, 150)
+
+# LOOCV
+for (j in 1:150) {
+  # Separate our training (n-1 obs) and test data (1 obs)
+  train_data <- iris.standardized1[-j,]
+  test_data <- iris.standardized1[j,]
+  
+  # Fit model with training data (n-1 obs)
+  log_vers <- glm(as.factor(versI) ~ SL_s + SW_s + PL_s + PW_s, family=binomial(link=logit), data=train_data)
+  knn10_vers <- knn3(as.factor(versI) ~ SL_s + SW_s + PL_s + PW_s, data = train_data, k=10)
+  lda_vers <- lda(as.factor(versI) ~ SL_s + SW_s + PL_s + PW_s, data = train_data)
+
+  # Predict the remaining observation
+  loo_preds1[j] <- predict(log_vers, test_data)
+  loo_preds2[j] <- predict(knn10_vers, test_data, type = "class")
+  loo_preds3[j] <- predict(lda_vers, test_data)$class
+}
+```
+
+# Sensitivity, Specificity, and Misclassifcation Rate
+
+```{r}
+# changing the values for the log function.
+loo_preds1 <- ifelse(loo_preds1 > 0.5, "Yes", "No")
+# finding the log loocv misclassification rate
+log_mc <- mean(loo_preds1 != iris.standardized1$versI[1:150])
+
+# getting values for sensitivity and specificity calls
+log_a <- sum(loo_preds1 == "Yes" & iris.standardized1$versI == "Yes")
+log_b <- sum(loo_preds1 == "No" & iris.standardized1$versI == "Yes")  # false negative
+log_c <- sum(loo_preds1  == "Yes" & iris.standardized1$versI == "No") # false positive
+log_d <- sum(loo_preds1 == "No" & iris.standardized1$versI == "No")
+# log sensitivity and specificity calls
+log_sens <- log_a/(log_a + log_b)
+log_spec <- log_d/(log_c + log_d)
+
+# changing the value of iris.standard versI so comparison can be made
+iris.standardized1$versI <- ifelse(iris.standardized1$versI == "Yes", 2, 1)
+
+# finding the kNN loocv misclassification rate
+knn10_loo <- mean(loo_preds2 != iris.standardized1$versI[1:150])
+
+# getting values for sensitivity and specificity calls
+knn10_a <- sum(loo_preds2 == 2 & iris.standardized1$versI == 2)
+knn10_b <- sum(loo_preds2 == 1 & iris.standardized1$versI == 2)  # false negative
+knn10_c <- sum(loo_preds2  == 2 & iris.standardized1$versI == 1) # false positive
+knn10_d <- sum(loo_preds2 == 1 & iris.standardized1$versI == 1)
+
+# kNN sensitivity and specificity calls
+knn10_sens <- knn10_a/(knn10_a + knn10_b)
+knn10_spec <- knn10_d/(knn10_c + knn10_d)
+
+# finding the lda loocv misclassification rate
+lda_loo_mc <- mean(loo_preds3 != iris.standardized1$versI[1:150])
+
+# getting values for sensitivity and specificity calls
+lda_a <- sum(loo_preds3 == 2 & iris.standardized1$versI == 2)
+lda_b <- sum(loo_preds3 == 1 & iris.standardized1$versI == 2)  # false negative
+lda_c <- sum(loo_preds3  == 2 & iris.standardized1$versI == 1) # false positive
+lda_d <- sum(loo_preds3 == 1 & iris.standardized1$versI == 1)
+
+# lda sensitivity and specificity calls
+lda_sens <- lda_a/(lda_a + lda_b)
+lda_spec <- lda_d/(lda_c + lda_d)
+
+# creating columns for sensitivity, specificity, and misclassification rate
+sens <- c(log_sens, knn10_sens, lda_sens)
+spec <- c(log_spec, knn10_spec, lda_spec)
+mc_rate <- c(log_mc, knn10_loo, lda_loo_mc)
+
+answer <- data.frame(sens, spec, mc_rate)
+answer
+```
+
+
