@@ -1,0 +1,201 @@
+---
+title: "Homework 5"
+author: "Alex Rintamaa"
+date: "2024-04-29"
+output: html_document
+---
+
+
+Regression
+
+```{r}
+library(caret)
+library(tree)
+library(randomForest)
+library(gbm)
+
+wine_qualt <- read.csv("winequality.csv")
+```
+
+
+For this problem, we will be using a wine quality data set. This data set contains 11 numeric predictors
+of wine quality and a quality score from 0-10 based on ratings from experts. We will be creating
+regression tree models to predict the quality of wines based on those 11 features.
+1) Data processing. Separate the data into training and testing sets (80% training / 20% testing)
+
+```{r}
+set.seed(4282024)
+
+train_index <- createDataPartition(wine_qualt$quality, p=0.8, list=FALSE)
+
+training_data <- wine_qualt[train_index, ]
+testing_data <- wine_qualt[-train_index, ]
+
+```
+
+
+2) Single Regression Tree. Fit a regression tree to the training set. In your results, include a plot of the resulting tree. Compute the test MSE.
+
+```{r}
+set.seed(4282024)
+wineTree <- tree(quality ~ ., data = training_data)
+wineTree
+wineTree$frame
+plot(wineTree)
+text(wineTree)
+title(main="Unpruned Regression Tree")
+
+
+predictions <- predict(wineTree, newdata = testing_data)
+
+test_mse <- mean((testing_data$quality - predictions)^2)
+test_mse
+```
+
+
+3) Single Regression Tree (Bootstrapped). Take a single bootstrap sample from your training set.
+Fit another regression tree using this bootstrap sample. Include a plot of this tree in your results.
+Briefly describe how this tree compared to the tree in problem(2). Compute the test MSE.
+
+```{r}
+bootstrap <- training_data[sample(nrow(training_data), replace = TRUE), ]
+
+boot_wine_tree <- tree(quality ~., data = bootstrap)
+
+plot(boot_wine_tree)
+text(boot_wine_tree, pretty = 0)
+
+
+boot_preds <- predict(boot_wine_tree, newdata = testing_data)
+
+boot_test_mse <- mean((testing_data$quality - boot_preds)^2)
+boot_test_mse
+```
+
+4) Bagging. Fit a bagging model to your original training set. Compute the test MSE.
+
+```{r}
+bagging_wine <- randomForest(quality ~., data = training_data)
+
+bagging_predictions <- predict(bagging_wine, newdata = testing_data)
+
+bagging_test_mse <- mean((testing_data$quality - bagging_predictions)^2)
+bagging_test_mse
+```
+
+5) Random Forest. Fit a random forest model to your training set. Use the out-of-bag MSE to
+choose the tuning parameter mtry. Compute the test MSE of the final model, and report the
+chosen value of the tuning parameter.
+
+```{r}
+mtry_grid <- expand.grid(mtry = seq(1, 10))
+
+rf_model <- randomForest(quality ~., 
+                         data = training_data,
+                         tuneGrid=data.frame(mtry_grid),
+                         ntree=100)
+
+
+
+best_mtry <- rf_model$mtry
+
+print(best_mtry)
+
+final_rf_model <- randomForest(quality ~., data = training_data, mtry = best_mtry)
+
+final_predictions <- predict(final_rf_model, newdata = testing_data)
+rf_test_mse <- mean((testing_data$quality - final_predictions)^2)
+rf_test_mse
+```
+
+6) Boosting. Fit a boosting model to your training set. Use 5-fold cross-validation to choose the
+number of trees and the interaction depth. Try values up to 10000 (by 1000) for the number of
+trees and values up to 5 for the interaction depth. Compute the test MSE of the final model, and
+report the chosen values of the tuning parameters.
+
+```{r}
+boost_tune <- expand.grid(nt=seq(1000, 10000, by=1000), 
+                          id=1:5)
+# nt: total number of trees (iterations)
+# id: interaction depth, i.e., the maximum number of splits allowed in each tree.
+
+boost_tune$mse <- NA
+
+# Boosting - Tuning
+for (i in 1:nrow(boost_tune)) {
+  boost_mod <- gbm(quality~., data = training_data,
+                   n.trees=boost_tune$nt[i], # number of trees
+                   interaction.depth = boost_tune$id[i], 
+                   shrinkage=0.1, 
+                   distribution = "gaussian") 
+  boost_pred <- predict(boost_mod, testing_data, n.trees=boost_mod$nt[i]) 
+  boost_tune$mse[i] <- mean((testing_data$quality - boost_pred)^2)
+}
+boost_tune[which.min(boost_tune$mse),]
+```
+
+
+7) Which model in (b) through (f) was the best for predicting wine quality?
+
+The best model in (b) through (f) for predicting wine quality is the random forest model with mtry = 3, which has a slightly lower MSE than the bagging model seen in model(D)
+
+
+Classification
+For this problem, we will be using video game data to predict the winner of each game based on various
+characteristics of each game, recorded 10 minutes into the game. For more information about this data
+set, see https://www.kaggle.com/bobbyscience/league-of-legends-diamond-ranked-games-10-min.
+League of Legends is a team game that features two teams, a “blue” team and a “red” team. The
+response variable for this data set is blueWins, which is 1 if the blue team won the game and 0 if the red
+team won the game. This data set contains 29 other features of the game that can be used to try to
+predict the outcome.
+8) Separate the data into training and testing sets (80% training / 20% testing)
+
+```{r}
+library(tidyverse)
+data <- read.csv("gaming.csv") %>%
+  mutate(blueWins = as.factor(blueWins))
+
+```
+
+
+9) Fit a random forest model using the training set. Use the out-of-bag misclassification rate to
+choose the tuning parameter mtry (try values from 1 to 10).
+
+```{r}
+mtry_grid <- expand.grid(mtry = seq(1, 10))
+bag2_caret <- train(blueWins ~.,
+                   data=data,
+                   method="rf",
+                   trControl=trainControl("oob", p = .8), # Out-of-bag MSE, set train to 80%
+                   tuneGrid=data.frame(mtry_grid),
+                   ntree=100) 
+# Use CV for comparing models
+# mtry can be tuned in caret with 'oob'
+bag2_caret
+bag2_caret$bestTune
+```
+
+10) Report the misclassification rate for the final model. What was the chosen value of the tuning
+parameter?
+
+```{r}
+misclass_rate <- 1 - max(bag2_caret$results$Accuracy)
+print(paste0("misclass rate: ", misclass_rate," mtry : ", bag2_caret$bestTune))
+
+```
+
+11) Create a plot that shows the variable importance of the predictors in the final model. Which
+variables are most important for predicting whether the blue team will win?
+
+```{r}
+plot(varImp(bag2_caret, scale=TRUE))
+print("The best predictors are blueGoldDiff, blueExperienceDiff, redTotalGold, and blueTotalGold in decreasing order of importance.")
+```
+
+
+The best predictors are blueGoldDiff, blueExperienceDiff, redTotalGold, and blueTotalGold.
+
+
+
+
+
