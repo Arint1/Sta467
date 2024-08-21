@@ -1,0 +1,167 @@
+---
+title: "Homework 4"
+author: "Alex Rintamaa"
+date: "2024-04-09"
+output: html_document
+---
+
+1. Explain the relationship between the number of knots and the degree of a spline regression model
+and model flexibility.
+
+ Too many knots can lead to overfitting, so it is important to find a balance. The regression spline is flexible in regions that contain a lot of knots as a result of those regions the polynomial coefficients change rapidly. When holding N as the number of knots, the degree of the spline regression model is N - 1. The degrees of freedom is N + D where D is the degree. For example, a cubic spline with 4 knots will have df = 5+3 = 8.
+
+2. What are the spline basis functions for a cubic spline basis with 3 knots at values x1, x2, and x3?
+
+$$
+y_{i} = \beta_{0} + \beta_{1}x + \beta_{2}x^2 + \beta_{3}x^3 + h(x, x_{1}) + h(x, x_{2}) + h(x, x_{3}) + \epsilon_{i} \text{ where } h(x, x_{k}) = \{(x-x_{k}) \text{ if } x>x_{k} \text{ else } 0\} 
+
+$$
+
+```{r}
+library(caret)
+library(tidyverse)
+library(MASS)
+library(splines)
+
+raceway <- read.table("raceway.txt", header = TRUE)
+raceway
+glimpse(raceway)
+```
+
+3) Fit the following models for predicting the top speed as a function of circumference. Report the leave-
+one-out cross-validation error for each model. For all models that involve knots, use just one knot at 1.5.
+(We would use more, but some of the models would become overparameterized with so few data
+points). Which model best predicts the top speed? (12 points: 2pts each + 2pts comparison)
+a) Linear Regression
+b) Step Regression
+c) Piecewise Linear Regression
+d) Piecewise Polynomial Regression (degree=2)
+e) Spline Regression (degree=2)
+
+# Linear Regression
+
+```{r, warning=FALSE}
+lm_caret <- train(speed ~ circum,
+                     method="lm",
+                     data=raceway,
+                     trControl=trainControl("loocv", savePredictions = TRUE),
+                  preProcess = c("center", "scale"))
+```
+# Step Regression
+
+```{r, warning=FALSE}
+circum_knots <- c(min(raceway$circum), 1.5,
+                   max(raceway$circum))
+
+raceway$cut_circum <- cut(raceway$circum, breaks=circum_knots,
+                               right=FALSE, include.lowest=TRUE)
+
+step_caret <- train(speed ~ cut_circum,
+                    method="lm",
+                    data=raceway,
+                    trControl=trainControl("loocv"),
+                    preProcess=c("center", "scale"))
+```
+
+# Piecewise polynomial
+
+```{r, warning=FALSE}
+circum_knots <- c(min(raceway$circum), 1.5,
+                   max(raceway$circum))
+
+raceway$cut_circum <- cut(raceway$circum, breaks=circum_knots,
+                               right=FALSE, include.lowest=TRUE)
+
+piece_caret <- train(speed ~ cut_circum*circum,
+                    method="lm",
+                    data=raceway,
+                    trControl=trainControl("loocv"),
+                    preProcess=c("center", "scale"))
+```
+
+```{r, warning=FALSE}
+circum_knots <- c(min(raceway$circum), 1.5,
+                   max(raceway$circum))
+
+raceway$cut_circum <- cut(raceway$circum, breaks=circum_knots,
+                               right=FALSE, include.lowest=TRUE)
+
+poly_caret <- train(speed ~ cut_circum*circum + cut_circum*I(circum^2),
+                    method="lm",
+                    data=raceway,
+                    trControl=trainControl("loocv"),
+                    preProcess=c("center", "scale"))
+```
+
+```{r, warning=FALSE}
+circum_knots <- c(min(raceway$circum), 1.5,
+                   max(raceway$circum))
+
+raceway$cut_circum <- cut(raceway$circum, breaks=circum_knots,
+                               right=FALSE, include.lowest=TRUE)
+
+
+splines_caret <- train(speed ~ bs(circum, knots=1.5, degree=2),
+                    method="lm",
+                    data=raceway,
+                    trControl=trainControl("loocv"),
+                    preProcess = c("center", "scale"))
+
+lm_caret$results
+step_caret$results
+piece_caret$results
+poly_caret$results
+splines_caret$results
+```
+
+```{r, warning = FALSE}
+gam <- train(speed ~ bs(circum, knots = 1.5) + bs(banking, knots = 17),
+             method = "lm",
+             data=raceway,
+             trContorol=trainControl("loocv"),
+             preProcess = c("center", "scale"))
+```
+
+
+5.Fit a LOESS smoother to model the top speed as a function of circumference. Use a degree of 1, and
+choose a value of span that makes the curve reasonably smooth. Plot the data and the smoother. (3
+points)
+
+```{r}
+
+loess_caret <- train(speed ~ circum,
+                     method="gamLoess",
+                     data=raceway,
+                     trControl=trainControl("cv", 5),
+                     tuneGrid=data.frame(span=0.45, degree=1))
+                     tuneGrid=expand.grid(span=seq(0.2,0.8,by=0.05), degree=1)  
+loess_caret
+smooth_data <- data.frame(circum = seq(min(raceway$circum), max(raceway$circum), length.out = 100))
+smooth_data$preds <- predict(loess_caret, newdata = smooth_data)
+
+ggplot() +
+  geom_point(aes(x=circum, y=speed), data=raceway) +
+  geom_line(aes(x=circum, y=preds), color="red", size=2, data=smooth_data) +
+  geom_line(aes(x=circum, y=preds), color="blue", size=2, data=smooth_data) +
+  theme_bw()
+```
+6. Fit a smoothing spline to model the top speed as a function of circumference. Try values of df from 1
+to 5 by 0.25. Plot the data and the smoother. 
+
+```{r}
+smooth_caret <- train(speed ~ circum,
+                  method="gamSpline",
+                  data=raceway,
+                  trControl=trainControl("cv", 5),
+                  tuneGrid=data.frame(df=1:15))
+smooth_caret
+
+smooth_data <- data.frame(circum = seq(min(raceway$circum), max(raceway$circum), length.out = 100))
+smooth_data$preds <- predict(smooth_caret,smooth_data)
+
+ggplot() +
+  geom_point(aes(x=circum, y=speed), data=raceway) +
+  geom_line(aes(x=circum, y=preds), color="red", size=2, data=smooth_data) +
+  geom_line(aes(x=circum, y=preds), color="blue", size=2, data=smooth_data) +
+  theme_bw()
+```
