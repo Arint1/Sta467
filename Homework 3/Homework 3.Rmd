@@ -1,0 +1,174 @@
+---
+title: "Homework 3"
+author: "Alex Rintamaa"
+date: "2024-03-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(pls)
+library(knitr)
+```
+
+
+
+```{r}
+cancer <- read.csv("breast_cancer.csv")
+
+cancer <- subset(cancer, select = -c(id))
+
+head(cancer)
+```
+
+## 1
+
+```{r}
+set.seed(03172024)
+cancer_lasso <- train(diagnosis ~ .,
+                    data = cancer,
+                    method="glmnet",
+                    trControl = trainControl(method = "cv", 5),
+                    preProcess = c("center", "scale"),
+                    tuneGrid = expand.grid(alpha = 1,
+                                           lambda=seq(0, 0.1, by = 0.01)))
+
+
+
+best_lambda <- cancer_lasso$bestTune$lambda
+
+print(paste("Best lambda:", best_lambda))
+
+best_accuracy <- max(cancer_lasso$results$Accuracy)
+lasso_misclassification_rate <- 1 - best_accuracy
+
+print(paste("Cross-validation Misclassification Rate:", lasso_misclassification_rate))
+```
+
+## 2
+
+```{r}
+cancer_ridge <- train(diagnosis ~ .,
+                    data=cancer,
+                    method="glmnet",  # use glmnet package
+                    trControl=trainControl(method="cv", 5), # 5-fold cross-validation
+                    preProcess = c("center", "scale"),
+                    tuneGrid = expand.grid(alpha=0, lambda=seq(0, .1, by=0.01)))
+
+best_lambda <- cancer_ridge$bestTune$lambda
+
+print(paste("Best lambda:", best_lambda))
+
+best_accuracy <- max(cancer_ridge$results$Accuracy)
+ridge_misclassification_rate <- 1 - best_accuracy
+
+print(paste("Cross-validation Misclassification Rate:", ridge_misclassification_rate))
+```
+
+## 3
+
+```{r}
+cancer_enet <- train(diagnosis ~ .,
+                   cancer,
+                   method = "glmnet",
+                   trControl = trainControl(method="cv", 5),
+                   preProcess = c("center", "scale"),
+                   tuneGrid = expand.grid(alpha=seq(0, 0.1, by=0.01),
+                                          lambda=seq(0, 0.1, by=0.01)))
+
+
+best_lambda <- cancer_enet$bestTune$lambda
+
+print(paste("Best lambda:", best_lambda))
+
+best_accuracy <- max(cancer_enet$results$Accuracy)
+enet_misclassification_rate <- 1 - best_accuracy
+
+print(paste("Cross-validation Misclassification Rate:", enet_misclassification_rate))
+```
+
+## 4
+
+```{r}
+comp_results <- resamples(list(cancer_lasso, cancer_ridge, cancer_enet))
+comp_results$values
+
+bwplot(comp_results)
+dotplot(comp_results)
+
+summary(comp_results)
+```
+
+Looking at the plots above, it can be see that at a confidence level of 95%, the accuracy is best on model 3 which is the Elastic Net, we can also see the highest Kappa here which represents that the data among difference predictors has the highest correlation.
+
+```{r}
+misclass_table <- data.frame(lasso_misclassification_rate, ridge_misclassification_rate, enet_misclassification_rate)
+names(misclass_table) <- c("LASSO", "Ridge", "Elastic Net")
+kable(misclass_table)
+```
+
+
+Looking at the table above, we can see that the Elastic Net model does the best at predicting the data. With the lowest misclassification rate at 0.0192988, this model is almost 1% better than the other two models.
+
+## 5
+
+```{r}
+spotify <- read.csv("spotify.csv")
+
+spotify <- spotify %>%
+  select(popularity, acousticness, danceability, energy, instrumentalness, liveness, loudness, speechiness, tempo, valence)
+
+head(spotify)
+```
+
+```{r}
+spotify_enet <- train(popularity ~ .,
+                   spotify,
+                   method = "glmnet",
+                   trControl = trainControl(method="cv", 5),
+                   preProcess = c("center", "scale"),
+                   tuneGrid = expand.grid(alpha=seq(0.1, 1, by=0.1),
+                                          lambda=seq(0, 0.2, by=0.02)))
+
+print(paste("The selected values for lambda and alpha are: ", spotify_enet$bestTune))
+
+spotify_enet$results[101,]
+```
+
+
+```{r}
+spotifyPCR <- train(popularity ~ .,
+                   data=spotify,
+                   method="pcr", # pcr() in pls library
+                   preProcess=c("center", "scale"),
+                   trControl = trainControl(method="cv", 5),
+                   tuneGrid=data.frame(ncomp=1:9))
+
+spotifyPCR
+```
+
+The final chosen model was the model with all 9 predictors, as this had the smallest RMSE of 27.93138.
+
+```{r}
+spotify_var <- (spotifyPCR$finalModel$Xvar)/(spotifyPCR$finalModel$Xtotvar)
+
+dotplot(spotify_var)
+```
+
+The dotplot above shows the variability of all the predictors that is explained by each of the principal components based on the model.
+
+```{r}
+comp_results <- resamples(list(spotifyPCR, spotify_enet))
+comp_results$values
+
+bwplot(comp_results)
+dotplot(comp_results)
+
+summary(comp_results)
+```
+
+Looking at the plots above, we can see that the average RMSE for Model1 is slightly higher than the average for Model2, however Model 2 has a higher ceiling. Because the average RMSE is so close for each of models, we would lean with Model1 as a result of it being the simpler model.
