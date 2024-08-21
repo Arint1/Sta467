@@ -1,0 +1,146 @@
+---
+title: "Homework 6"
+author: "Alex Rintamaa"
+date: "2024-05-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load the library
+library(pdfCluster)
+library(caret)
+
+# Open help menu
+?oliveoil
+# Load data for accessing
+data("oliveoil")
+```
+
+
+1) Using 10-fold cross validation, fit and tune a support vector classifier for predicting the region of each
+oil sample. Report any tuning parameters chosen, as well as the overall misclassification rate.
+
+
+```{r}
+
+# SVM Linear
+olive.svc <- train(region ~ .,
+             data =oliveoil,
+             method = "svmLinear",
+             trControl = trainControl("repeatedcv", number = 10, repeats = 10),
+             tuneGrid = expand.grid(C = c(0.1, 1, 10, 100)))
+
+olive.svc$bestTune
+olive.svc$results
+
+olive.misclass_svc<- 1 - max(olive.svc$results$Accuracy)
+olive.misclass_svc
+
+```
+2) Using 10-fold cross validation, fit and tune a support vector machine with a polynomial kernel for
+predicting the region of each oil sample. Report any tuning parameters chosen, as well as the overall
+misclassification rate.
+
+
+```{r}
+
+# SVM Polynomial
+olive.svmP <- train(region ~ .,
+             data=oliveoil,
+             method="svmPoly",
+             trControl=trainControl("repeatedcv", number=10, repeats=10),
+             tuneGrid=expand.grid(C=c(1,10,100),
+                                 degree=2:4,
+                                 scale=1))
+olive.svmP$bestTune
+olive.svmP$results
+
+olive.misclass_svmP<- 1 - max(olive.svmP$results$Accuracy)
+olive.misclass_svmP
+```
+3) Using 10-fold cross validation, fit and tune a support vector machine with a radial kernel for
+predicting the region of each oil sample. Report any tuning parameters chosen, as well as the overall
+misclassification rate.
+
+
+```{r}
+
+# SVM Radial
+olive.svmR <- train(region ~ .,
+              data = oliveoil,
+              method = "svmRadial",
+              trControl = trainControl("repeatedcv", number = 10, repeats = 10),
+              tuneGrid = expand.grid(C = c(0.1, 1, 10, 100),
+                                     sigma = c(0.01, 0.1, 1, 10)))
+olive.svmR$bestTune
+olive.misclass_svmR<- 1 - max(olive.svmR$results$Accuracy)
+olive.misclass_svmR
+
+```
+
+4) Which model from 1-3 is best at classifying the regions? Display the confusion matrix for the best
+model. Are there some regions where the classifier performs particularly well (with very few related
+misclassifications)?
+
+
+```{r}
+# Compare SVM models using resampling
+summary(resamples(list(linear = olive.svc,
+                       poly = olive.svmP,
+                       rad = olive.svmR)))
+
+predictions_svmr <- predict(olive.svmR, newdata = oliveoil)
+
+# Create the confusion matrix 
+confusion_matrix_svmr <- confusionMatrix(predictions_svmr, oliveoil$region)
+confusion_matrix_svmr
+```
+
+
+The best model we had was the SVM Radial Model, we can see that for some regions specifically Liguria East, Liguria West, Umbria, Apulia North, Sardinia Inland, and Sadinia Coast we are getting no false positves or false negatives.
+
+2. 
+
+
+```{r}
+library(ggplot2)
+# Define the curve equation
+curve_eq <- function(X1, X2) {
+  return((1 + X1)^2 + (2 - X2)^2 - 4)
+}
+
+# Generate data points for plotting
+X1 <- seq(-3, 3, length.out = 100)
+X2 <- seq(-1, 5, length.out = 100)
+data <- expand.grid(X1 = X1, X2 = X2)
+data$Class <- ifelse(curve_eq(data$X1, data$X2) > 0, "Outside", "Inside")
+
+
+
+# Plot
+ggplot(data, aes(x = X1, y = X2, color = Class, fill = Class)) +
+  geom_point(size = 1.5) +
+  geom_contour(aes(z = curve_eq(X1, X2)), breaks = 0, color = "black") +
+  theme_minimal() +
+  scale_color_manual(values = c("red", "blue"), name = "Class") +
+  scale_fill_manual(values = c("red", "blue"), name = "Class") +
+  labs(title = "Non-linear Decision Boundary") +
+  theme(legend.position = "right")
+```
+
+c)
+(0,0) has blue class classification
+(-1,1) has red class classification
+(2,2) has blue class classification
+(3,8) has blue class classification
+
+d)
+By completing the square, you can get 
+
+\[X_{1}^{2} + X_{2}^{2} + 2X_{1} - 4X_{2} + 1 = 0\]
+
+To solve for any term in terms of a linear formula, it is quite easy.
